@@ -4,7 +4,7 @@ import datetime
 from fpdf import FPDF
 
 # --- CONFIGURATION ---
-st.set_page_config(layout="wide", page_title="Bowler Artwork and Repro Cost Estimate")
+st.set_page_config(layout="wide", page_title="Artwork and Repro Cost Estimate")
 
 # Remove footer and tighten layout spacing
 hide_st_style = """
@@ -60,36 +60,38 @@ def clean_dataframe(df):
     df = df[~df['Item'].str.contains("Item|Quantity|Rand Value|Description", case=False, na=False)]
     return df
 
-# PDF Generation Function
+# PDF Generation Function - UPDATED FONT TO HELVETICA
 def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, vat, grand):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    
+    # Use Helvetica as it is a standard PDF core font
+    pdf.set_font("Helvetica", "B", 16)
     pdf.cell(200, 10, "Bowler Artwork and Repro Cost Estimate", ln=True, align='C')
     pdf.ln(10)
     
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Helvetica", "", 10)
     pdf.cell(100, 7, f"Client: {client}")
     pdf.cell(100, 7, f"Date: {date}", ln=True)
     pdf.cell(100, 7, f"Preprod Ref: {ref}")
     pdf.cell(100, 7, f"Description: {desc}", ln=True)
     pdf.ln(5)
     
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.cell(200, 7, "Foil Block Specifications:", ln=True)
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Helvetica", "", 10)
     pdf.cell(60, 7, f"Height: {foil_h} mm")
     pdf.cell(60, 7, f"Width: {foil_w} mm")
     pdf.cell(60, 7, f"Code: {foil_c}", ln=True)
     pdf.ln(5)
     
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.cell(100, 7, "Item Description", border=1)
     pdf.cell(30, 7, "Qty", border=1)
     pdf.cell(30, 7, "Unit (R)", border=1)
     pdf.cell(30, 7, "Total (R)", border=1, ln=True)
     
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Helvetica", "", 10)
     for name, vals in items.items():
         if vals['qty'] > 0:
             pdf.cell(100, 7, str(name), border=1)
@@ -98,7 +100,7 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
             pdf.cell(30, 7, f"{vals['total']:,.2f}", border=1, ln=True)
             
     pdf.ln(5)
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.cell(130, 7, "")
     pdf.cell(30, 7, "Total:", border=0)
     pdf.cell(30, 7, f"R {total:,.2f}", ln=True)
@@ -229,8 +231,8 @@ if not data.empty:
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_nett, vat_amount, final_grand_total)
         act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
-    except:
-        act2.error("PDF Generation Error")
+    except Exception as e:
+        act2.error(f"PDF Generation Error: {e}")
 
     if act3.button("🔄 Refresh / Clear Form"):
         st.session_state.reset_counter += 1
@@ -252,7 +254,7 @@ if not data.empty:
             ]
             
             # Show dataframe with a visual indicator for Status
-            st.dataframe(filtered_db.style.applymap(lambda x: 'color: red; font-weight: bold' if x == 'CANCELLED' else '', subset=['Status']))
+            st.dataframe(filtered_db.style.map(lambda x: 'color: red; font-weight: bold' if x == 'CANCELLED' else '', subset=['Status']))
             
             if not filtered_db.empty:
                 col_l, col_r = st.columns(2)
