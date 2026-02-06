@@ -184,33 +184,32 @@ if not data.empty:
         # --- LOGIC FOR CALCULATIONS ---
         is_foil_row = "foil" in item_name.lower()
         
-        # Determine Nett and Markup
         if is_foil_row and foil_code > 0:
+            # Use foil_code as the base Nett
             current_nett_unit = foil_code
-            markup_val = parse_price(row.get('Markup', '56')) # Get markup as number
+            markup_val = 56.0  # Fixed markup for foil as requested
         else:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
             markup_val = parse_price(row.get('Markup', '0'))
 
-        # Calculate Unit Price (Gross) based on Markup
-        # Formula: Unit Price = Nett + (Nett * Markup%)
+        # Calculate marked up Unit Price
         calculated_unit_price = current_nett_unit * (1 + (markup_val / 100))
         
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
-        # Unit price is shown/editable (defaults to calculated value)
+        # Display the marked up value in the Unit Price text box
         unit_price = r[2].number_input("Price", min_value=0.0, value=calculated_unit_price, key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
         # Calculations for totals
         line_total_gross = qty * unit_price
-        line_total_nett = qty * current_nett_unit
+        line_total_nett = qty * current_nett_unit # Hidden Nett Amount = Code * Qty
         
         total_gross_sum += line_total_gross
         r[3].code(f"{line_total_gross:,.2f}") 
 
         if is_admin:
-            r[4].write(f"{line_total_nett:,.2f}") # Quantity * Nett
+            r[4].write(f"{line_total_nett:,.2f}") # This is the hidden nett amount box
             r[5].write(f"{markup_val}%")
         
         item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
@@ -263,7 +262,6 @@ if not data.empty:
         st.session_state.loaded_data = {}
         st.rerun()
 
-    # DATABASE SECTION
     if not st.session_state.database.empty:
         st.markdown("---")
         with st.expander("📂 Database Search & Load", expanded=False):
