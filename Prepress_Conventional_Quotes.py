@@ -191,32 +191,32 @@ if not data.empty:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
             markup_val = parse_price(row.get('Markup', '0'))
 
-        # Calculate marked up Unit Price
+        # 1. Calculate the marked up value
         calculated_unit_price = current_nett_unit * 1.56 if is_foil_row else current_nett_unit * (1 + (markup_val / 100))
         
+        # 2. Input Quantity
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
-        # This is the Unit Price text box
+        # 3. Paste marked up value into Unit Price text box
         unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
-        # Calculations for totals - explicit multiplication
+        # 4. Multiply Unit Price by Qty and paste into Gross Total
         line_total_gross = float(qty) * float(unit_price)
         line_total_nett = float(qty) * float(current_nett_unit)
         
         total_gross_sum += line_total_gross
-        # Display the result in the Gross Total code box
         r[3].code(f"{line_total_gross:,.2f}") 
 
         if is_admin:
-            r[4].write(f"{line_total_nett:,.2f}") # Quantity * Code
+            r[4].write(f"{line_total_nett:,.2f}") 
             r[5].write(f"{markup_val}%")
         
         item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
 
     st.markdown("---")
     
-    res_c1, res_c2 = st.columns([3, 3])
+    res_c2 = st.columns([3, 3])[1]
     with res_c2:
         st.write("**Total (Excl. VAT):**")
         st.code(f"R {total_gross_sum:,.2f}")
@@ -234,15 +234,9 @@ if not data.empty:
         else:
             record = {
                 "Status": "ACTIVE",
-                "Client": client_name, 
-                "Preprod": preprod_ref, 
-                "Description": preprod_desc, 
-                "Date": str(quote_date), 
-                "Foil_H": foil_height, 
-                "Foil_W": foil_width, 
-                "Foil_C": foil_code, 
-                "Total_Excl_Vat": total_gross_sum, 
-                "VAT_15": vat_amount, 
+                "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
+                "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, 
+                "Foil_C": foil_code, "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, 
                 "Grand_Total": final_grand_total
             }
             for item, vals in item_entries.items():
@@ -267,26 +261,17 @@ if not data.empty:
         with st.expander("📂 Database Search & Load", expanded=False):
             search_term = st.text_input("🔍 Search by Client, Ref, or Description").lower()
             db = st.session_state.database
-            
-            filtered_db = db[
-                db['Client'].str.lower().str.contains(search_term) | 
-                db['Preprod'].str.lower().str.contains(search_term) |
-                db['Description'].str.lower().str.contains(search_term)
-            ]
-            
+            filtered_db = db[db['Client'].str.lower().str.contains(search_term) | db['Preprod'].str.lower().str.contains(search_term) | db['Description'].str.lower().str.contains(search_term)]
             st.dataframe(filtered_db.style.map(lambda x: 'color: red; font-weight: bold' if x == 'CANCELLED' else '', subset=['Status']))
-            
             if not filtered_db.empty:
                 col_l, col_r = st.columns(2)
                 select_list = [f"{idx}: [{row['Status']}] {row['Client']} ({row['Preprod']})" for idx, row in filtered_db.iterrows()]
                 selected_item = col_l.selectbox("Select an entry to manage:", select_list)
                 original_idx = int(selected_item.split(":")[0])
-
                 if col_l.button("📂 Load Selected Estimate"):
                     st.session_state.loaded_data = db.loc[original_idx].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
-
                 if col_r.button("❌ Mark Selected as CANCELLED"):
                     st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
                     st.warning(f"Estimate {original_idx} has been marked as Cancelled.")
