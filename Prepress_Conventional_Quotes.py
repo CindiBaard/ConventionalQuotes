@@ -166,7 +166,6 @@ if not data.empty:
     f1, f2, f3 = st.columns([1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
     foil_width = f2.number_input("Width (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_W", 0.0)), key=f"fw_{count}")
-    # Heading wording changed here
     foil_code = f3.number_input("Foil Code", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
@@ -190,9 +189,7 @@ if not data.empty:
         r[0].write(item_name)
         is_foil_row = "foil" in item_name.lower()
         
-        # --- CALCULATION LOGIC ---
         if is_foil_row:
-            # Markup changed to 1.56 multiplier
             calculated_unit_price = foil_code * 1.56
             current_nett_unit = foil_code
             markup_perc = 56.0
@@ -205,7 +202,6 @@ if not data.empty:
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
         if is_foil_row: foil_qty_entered = qty
-
         unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
         line_total_gross = float(qty) * float(unit_price)
@@ -235,7 +231,7 @@ if not data.empty:
         if not client_name:
             st.error("Missing Client Name.")
         elif foil_qty_entered > 0 and foil_code == 0:
-            st.error("⚠️ Validation Error: Foil Quantity is entered but Foil Code is 0. Please enter a Foil Code before saving.")
+            st.error("⚠️ Validation Error: Foil Quantity is entered but Foil Code is 0.")
         else:
             record = {
                 "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
@@ -245,9 +241,10 @@ if not data.empty:
             for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
             st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
             save_db(st.session_state.database)
-            st.success(f"Quote for {client_name} saved and stored!")
+            st.success(f"Quote for {client_name} saved!")
 
-    pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
+    # Filename logic for manual sorting to Desktop/Conventional Quotes
+    pdf_filename = f"Conventional_Quotes_{preprod_ref}_{client_name}.pdf".replace(" ", "_")
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
         act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
@@ -266,15 +263,20 @@ if not data.empty:
             filtered_db = db[db['Client'].astype(str).str.lower().str.contains(search_term) | db['Preprod'].astype(str).str.lower().str.contains(search_term)]
             st.dataframe(filtered_db)
             if not filtered_db.empty:
-                col_l, col_r = st.columns(2)
+                col_l, col_m, col_r = st.columns(3)
                 original_idx = int(col_l.selectbox("Select ID:", filtered_db.index))
                 if col_l.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[original_idx].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
-                if col_r.button("❌ Cancel Estimate"):
+                if col_m.button("❌ Cancel Estimate"):
                     st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
                     save_db(st.session_state.database)
+                    st.rerun()
+                if col_r.button("🗑️ Delete from Database"):
+                    st.session_state.database = st.session_state.database.drop(original_idx).reset_index(drop=True)
+                    save_db(st.session_state.database)
+                    st.success("Entry permanently deleted.")
                     st.rerun()
 else:
     st.info("👈 Use the Sidebar to upload your CSV file to begin.")
