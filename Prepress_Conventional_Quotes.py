@@ -184,24 +184,24 @@ if not data.empty:
         # --- LOGIC FOR CALCULATIONS ---
         is_foil_row = "foil" in item_name.lower()
         
+        # Determine unit values
         if is_foil_row and foil_code > 0:
             current_nett_unit = foil_code
-            markup_val = 56.0 
+            markup_perc = 56.0
         else:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
-            markup_val = parse_price(row.get('Markup', '0'))
+            markup_perc = parse_price(row.get('Markup', '0'))
 
-        # 1. Calculate the marked up value
-        calculated_unit_price = current_nett_unit * 1.56 if is_foil_row else current_nett_unit * (1 + (markup_val / 100))
+        # Calculate unit price based on markup
+        calculated_unit_price = current_nett_unit * (1 + (markup_perc / 100))
         
-        # 2. Input Quantity
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
-        # 3. Paste marked up value into Unit Price text box
+        # Unit Price Input (displays marked up value)
         unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
-        # 4. Multiply Unit Price by Qty and paste into Gross Total
+        # Totals
         line_total_gross = float(qty) * float(unit_price)
         line_total_nett = float(qty) * float(current_nett_unit)
         
@@ -209,14 +209,14 @@ if not data.empty:
         r[3].code(f"{line_total_gross:,.2f}") 
 
         if is_admin:
-            r[4].write(f"{line_total_nett:,.2f}") 
-            r[5].write(f"{markup_val}%")
+            r[4].write(f"{line_total_nett:,.2f}") # Qty * Nett unit price
+            r[5].write(f"{markup_perc}%")
         
         item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
 
     st.markdown("---")
     
-    res_c2 = st.columns([3, 3])[1]
+    res_c1, res_c2 = st.columns([3, 3])
     with res_c2:
         st.write("**Total (Excl. VAT):**")
         st.code(f"R {total_gross_sum:,.2f}")
