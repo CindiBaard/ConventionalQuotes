@@ -116,7 +116,15 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
 # --- SIDEBAR ---
 st.sidebar.title("🛠 Settings")
 view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
-is_admin = view_mode == "Advanced (Admin)"
+
+# Admin Password Logic
+is_admin = False
+if view_mode == "Advanced (Admin)":
+    pwd = st.sidebar.text_input("Enter Admin Password", type="password")
+    if pwd == "admin123": # You can change this password
+        is_admin = True
+    else:
+        st.sidebar.warning("Incorrect password")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Data Source")
@@ -157,12 +165,16 @@ if not data.empty:
 
     st.markdown("---")
 
+    # Layout adjustment for Admin View
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
     cols = st.columns(header_cols)
     cols[0].write("**Item Description**")
     cols[1].write("**Quantity**")
     cols[2].write("**Unit Price (R)**")
-    cols[3].write("**Total Amount (R)**")
+    cols[3].write("**Total (R)**")
+    if is_admin:
+        cols[4].write("**Nett (R)**")
+        cols[5].write("**Markup %**")
 
     item_entries = {}
     total_nett = 0.0
@@ -175,10 +187,12 @@ if not data.empty:
         is_foil_row = "foil" in item_name.lower()
         if is_foil_row and foil_code > 0:
             base_price = float(foil_code) * 1.56
-            nett_display = foil_code
+            nett_val = foil_code
+            markup_val = "56%"
         else:
             base_price = parse_price(row.get('Gross', row.get('Nett', '0.00')))
-            nett_display = parse_price(row.get('Nett', '0.00'))
+            nett_val = parse_price(row.get('Nett', '0.00'))
+            markup_val = row.get('Markup', '0%')
 
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         
@@ -188,6 +202,10 @@ if not data.empty:
         line_total = qty * unit_price
         total_nett += line_total
         r[3].code(f"{line_total:,.2f}") 
+
+        if is_admin:
+            r[4].write(f"{nett_val:,.2f}")
+            r[5].write(f"{markup_val}")
         
         item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total}
 
