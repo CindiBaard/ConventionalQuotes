@@ -3,11 +3,21 @@ import pandas as pd
 import datetime
 import os
 from fpdf import FPDF
+from pathlib import Path
 
 # --- CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Artwork and Repro Cost Estimate")
 
 DB_FILE = "estimates_db.csv"
+# Define the path to the Desktop folder
+DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
+
+# Ensure the folder exists on the desktop
+if not DESKTOP_PATH.exists():
+    try:
+        DESKTOP_PATH.mkdir(parents=True, exist_ok=True)
+    except:
+        pass
 
 # Remove footer and tighten layout spacing
 hide_st_style = """
@@ -116,7 +126,6 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
     
-    # --- APPROVAL SECTION WITH ADJUSTED SPACING ---
     pdf.ln(40) 
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(200, 10, "Client approval................................... Date...................... Order number......................", ln=True)
@@ -243,11 +252,19 @@ if not data.empty:
             save_db(st.session_state.database)
             st.success(f"Quote for {client_name} saved!")
 
-    # Filename logic for manual sorting to Desktop/Conventional Quotes
-    pdf_filename = f"Conventional_Quotes_{preprod_ref}_{client_name}.pdf".replace(" ", "_")
+    # Clean Filename
+    pdf_filename = f"{preprod_ref}_{client_name}.pdf".replace(" ", "_")
+    
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
-        act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
+        
+        # Action button to save directly to desktop folder
+        if act2.button("💾 Save PDF to Desktop Folder"):
+            save_path = DESKTOP_PATH / pdf_filename
+            with open(save_path, "wb") as f:
+                f.write(pdf_bytes)
+            st.toast(f"✅ Saved to: {save_path}")
+
     except Exception as e: act2.error(f"PDF Error: {e}")
 
     if act3.button("🔄 Refresh / Clear Form"):
