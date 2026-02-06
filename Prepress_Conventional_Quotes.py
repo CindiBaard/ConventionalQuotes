@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import os
 from fpdf import FPDF
 
 # --- CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Artwork and Repro Cost Estimate")
+
+DB_FILE = "estimates_db.csv"
 
 # Remove footer and tighten layout spacing
 hide_st_style = """
@@ -29,9 +32,18 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
+# --- DATABASE PERSISTENCE LOGIC ---
+def load_db():
+    if os.path.exists(DB_FILE):
+        return pd.read_csv(DB_FILE)
+    return pd.DataFrame()
+
+def save_db(df):
+    df.to_csv(DB_FILE, index=False)
+
 # --- SESSION STATE INITIALIZATION ---
 if 'database' not in st.session_state:
-    st.session_state.database = pd.DataFrame()
+    st.session_state.database = load_db()
 
 if 'reset_counter' not in st.session_state:
     st.session_state.reset_counter = 0
@@ -64,18 +76,15 @@ def clean_dataframe(df):
 def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, vat, grand):
     pdf = FPDF()
     pdf.add_page()
-    
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(200, 10, "Bowler Artwork and Repro Cost Estimate", ln=True, align='C')
     pdf.ln(10)
-    
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(100, 7, f"Client: {client}")
     pdf.cell(100, 7, f"Date: {date}", ln=True)
     pdf.cell(100, 7, f"Preprod Ref: {ref}")
     pdf.cell(100, 7, f"Description: {desc}", ln=True)
     pdf.ln(5)
-    
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(200, 7, "Foil Block Specifications:", ln=True)
     pdf.set_font("Helvetica", "", 10)
@@ -83,13 +92,11 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(60, 7, f"Width: {foil_w} mm")
     pdf.cell(60, 7, f"Code: {foil_c}", ln=True)
     pdf.ln(5)
-    
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(100, 7, "Item Description", border=1)
     pdf.cell(30, 7, "Qty", border=1)
     pdf.cell(30, 7, "Unit (R)", border=1)
     pdf.cell(30, 7, "Total (R)", border=1, ln=True)
-    
     pdf.set_font("Helvetica", "", 10)
     for name, vals in items.items():
         if vals['qty'] > 0:
@@ -97,7 +104,6 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
             pdf.cell(30, 7, f"{vals['qty']:.0f}", border=1)
             pdf.cell(30, 7, f"{vals['unit']:,.2f}", border=1)
             pdf.cell(30, 7, f"{vals['total']:,.2f}", border=1, ln=True)
-            
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(130, 7, "")
@@ -109,20 +115,16 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(130, 7, "")
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- SIDEBAR ---
 st.sidebar.title("🛠 Settings")
 view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
-
 is_admin = False
 if view_mode == "Advanced (Admin)":
     pwd = st.sidebar.text_input("Enter Admin Password", type="password")
-    if pwd == "admin123":
-        is_admin = True
-    else:
-        st.sidebar.warning("Incorrect password")
+    if pwd == "admin123": is_admin = True
+    else: st.sidebar.warning("Incorrect password")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Data Source")
@@ -146,7 +148,6 @@ else:
 # --- MAIN FORM ---
 if not data.empty:
     st.title("📋 Bowler Artwork and Repro Cost Estimate")
-    
     count = st.session_state.reset_counter
     loaded = st.session_state.loaded_data
     
@@ -162,7 +163,6 @@ if not data.empty:
     foil_code = f3.number_input("Foil Code (Nett Value)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
-
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
     cols = st.columns(header_cols)
     cols[0].write("**Item Description**")
@@ -175,16 +175,14 @@ if not data.empty:
 
     item_entries = {}
     total_gross_sum = 0.0
+    foil_qty_entered = 0.0
 
     for idx, row in data.iterrows():
         r = st.columns(header_cols)
         item_name = row['Item']
         r[0].write(item_name)
-        
-        # --- LOGIC FOR CALCULATIONS ---
         is_foil_row = "foil" in item_name.lower()
         
-        # Determine unit values
         if is_foil_row and foil_code > 0:
             current_nett_unit = foil_code
             markup_perc = 56.0
@@ -192,31 +190,25 @@ if not data.empty:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
             markup_perc = parse_price(row.get('Markup', '0'))
 
-        # Calculate unit price based on markup
         calculated_unit_price = current_nett_unit * (1 + (markup_perc / 100))
-        
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
-        # Unit Price Input (displays marked up value)
+        if is_foil_row: foil_qty_entered = qty
+
         unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
-        
-        # Totals
         line_total_gross = float(qty) * float(unit_price)
         line_total_nett = float(qty) * float(current_nett_unit)
         
         total_gross_sum += line_total_gross
         r[3].code(f"{line_total_gross:,.2f}") 
-
         if is_admin:
-            r[4].write(f"{line_total_nett:,.2f}") # Qty * Nett unit price
+            r[4].write(f"{line_total_nett:,.2f}")
             r[5].write(f"{markup_perc}%")
-        
         item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
 
     st.markdown("---")
-    
-    res_c1, res_c2 = st.columns([3, 3])
+    res_c2 = st.columns([3, 3])[1]
     with res_c2:
         st.write("**Total (Excl. VAT):**")
         st.code(f"R {total_gross_sum:,.2f}")
@@ -230,26 +222,25 @@ if not data.empty:
     
     if act1.button("🚀 Finalize and Save to Database"):
         if not client_name:
-            st.error("Please enter a Client Name.")
+            st.error("Missing Client Name.")
+        elif foil_qty_entered > 0 and foil_code == 0:
+            st.error("⚠️ Validation Error: Foil Quantity is entered but Foil Code is 0. Please enter a Foil Code before saving.")
         else:
             record = {
-                "Status": "ACTIVE",
-                "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
-                "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, 
-                "Foil_C": foil_code, "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, 
-                "Grand_Total": final_grand_total
+                "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
+                "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, "Foil_C": foil_code, 
+                "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_grand_total
             }
-            for item, vals in item_entries.items():
-                record[f"{item}_Qty"] = vals["qty"]
+            for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
             st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
-            st.success(f"Quote for {client_name} saved!")
+            save_db(st.session_state.database)
+            st.success(f"Quote for {client_name} saved and stored!")
 
     pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
         act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
-    except Exception as e:
-        act2.error(f"PDF Generation Error: {e}")
+    except Exception as e: act2.error(f"PDF Error: {e}")
 
     if act3.button("🔄 Refresh / Clear Form"):
         st.session_state.reset_counter += 1
@@ -259,22 +250,20 @@ if not data.empty:
     if not st.session_state.database.empty:
         st.markdown("---")
         with st.expander("📂 Database Search & Load", expanded=False):
-            search_term = st.text_input("🔍 Search by Client, Ref, or Description").lower()
+            search_term = st.text_input("🔍 Search").lower()
             db = st.session_state.database
-            filtered_db = db[db['Client'].str.lower().str.contains(search_term) | db['Preprod'].str.lower().str.contains(search_term) | db['Description'].str.lower().str.contains(search_term)]
-            st.dataframe(filtered_db.style.map(lambda x: 'color: red; font-weight: bold' if x == 'CANCELLED' else '', subset=['Status']))
+            filtered_db = db[db['Client'].astype(str).str.lower().str.contains(search_term) | db['Preprod'].astype(str).str.lower().str.contains(search_term)]
+            st.dataframe(filtered_db)
             if not filtered_db.empty:
                 col_l, col_r = st.columns(2)
-                select_list = [f"{idx}: [{row['Status']}] {row['Client']} ({row['Preprod']})" for idx, row in filtered_db.iterrows()]
-                selected_item = col_l.selectbox("Select an entry to manage:", select_list)
-                original_idx = int(selected_item.split(":")[0])
-                if col_l.button("📂 Load Selected Estimate"):
+                original_idx = int(col_l.selectbox("Select ID:", filtered_db.index))
+                if col_l.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[original_idx].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
-                if col_r.button("❌ Mark Selected as CANCELLED"):
+                if col_r.button("❌ Cancel Estimate"):
                     st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
-                    st.warning(f"Estimate {original_idx} has been marked as Cancelled.")
+                    save_db(st.session_state.database)
                     st.rerun()
 else:
     st.info("👈 Use the Sidebar to upload your CSV file to begin.")
