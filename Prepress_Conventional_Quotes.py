@@ -115,6 +115,12 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(130, 7, "")
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
+    
+    # --- APPROVAL SECTION ---
+    pdf.ln(20)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(200, 10, "Client approval................................... Date...................... Order number......................", ln=True)
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- SIDEBAR ---
@@ -160,7 +166,7 @@ if not data.empty:
     f1, f2, f3 = st.columns([1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
     foil_width = f2.number_input("Width (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_W", 0.0)), key=f"fw_{count}")
-    foil_code = f3.number_input("Foil Code", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
+    foil_code = f3.number_input("Foil Code (Nett Value)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
@@ -186,9 +192,9 @@ if not data.empty:
         # --- CALCULATION LOGIC ---
         if is_foil_row:
             # Multiply Foil Code by 56% markup
-            calculated_unit_price = foil_code * 1.56
+            calculated_unit_price = foil_code * 0.56
             current_nett_unit = foil_code
-            markup_perc = 156.0
+            markup_perc = 56.0
         else:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
             markup_perc = parse_price(row.get('Markup', '0'))
