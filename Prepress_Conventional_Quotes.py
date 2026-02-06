@@ -183,20 +183,25 @@ if not data.empty:
         r[0].write(item_name)
         is_foil_row = "foil" in item_name.lower()
         
-        if is_foil_row and foil_code > 0:
+        # --- CALCULATION LOGIC ---
+        if is_foil_row:
+            # Multiply Foil Code by 56% markup
+            calculated_unit_price = foil_code * 0.56
             current_nett_unit = foil_code
             markup_perc = 56.0
         else:
             current_nett_unit = parse_price(row.get('Nett', '0.00'))
             markup_perc = parse_price(row.get('Markup', '0'))
+            calculated_unit_price = current_nett_unit * (1 + (markup_perc / 100))
 
-        calculated_unit_price = current_nett_unit * (1 + (markup_perc / 100))
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
         qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
         if is_foil_row: foil_qty_entered = qty
 
+        # Insert the marked up value into the unit price text box
         unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
+        
         line_total_gross = float(qty) * float(unit_price)
         line_total_nett = float(qty) * float(current_nett_unit)
         
