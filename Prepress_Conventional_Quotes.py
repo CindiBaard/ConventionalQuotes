@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-import platform
-import subprocess
 from fpdf import FPDF
 from pathlib import Path
 
@@ -11,37 +9,40 @@ from pathlib import Path
 st.set_page_config(layout="wide", page_title="Artwork and Repro Cost Estimate")
 
 DB_FILE = "estimates_db.csv"
+# Define the path to the Desktop folder
+DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
 
-def get_desktop_path():
-    """Detects the desktop path across Windows (with/without OneDrive) and macOS."""
-    home = Path.home()
-    # Check common OneDrive locations first as they are the primary cause of 'missing' files
-    onedrive_desktop = home / "OneDrive" / "Desktop"
-    standard_desktop = home / "Desktop"
-    
-    if onedrive_desktop.exists():
-        return onedrive_desktop
-    return standard_desktop
+# Ensure the folder exists on the desktop
+if not DESKTOP_PATH.exists():
+    try:
+        DESKTOP_PATH.mkdir(parents=True, exist_ok=True)
+    except:
+        pass
 
-# Define and Create the Folder
-DESKTOP_PATH = get_desktop_path() / "Conventional Quotes"
-try:
-    DESKTOP_PATH.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    st.error(f"Folder Creation Error: {e}")
-
-# --- STYLING ---
+# Remove footer and tighten layout spacing
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             header {visibility: hidden;}
-            .block-container { padding-top: 1rem; padding-bottom: 0rem; padding-left: 5rem; padding-right: 5rem; }
+            .block-container {
+                padding-top: 1rem;
+                padding-bottom: 0rem;
+                padding-left: 5rem;
+                padding-right: 5rem;
+            }
+            [data-testid="stMarkdownContainer"] p {
+                margin-bottom: 0.2rem;
+            }
+            hr {
+                margin-top: 0.5rem !important;
+                margin-bottom: 0.5rem !important;
+            }
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- DATABASE LOGIC ---
+# --- DATABASE PERSISTENCE LOGIC ---
 def load_db():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE)
@@ -50,27 +51,38 @@ def load_db():
 def save_db(df):
     df.to_csv(DB_FILE, index=False)
 
+# --- SESSION STATE INITIALIZATION ---
 if 'database' not in st.session_state:
     st.session_state.database = load_db()
+
 if 'reset_counter' not in st.session_state:
     st.session_state.reset_counter = 0
+
 if 'loaded_data' not in st.session_state:
     st.session_state.loaded_data = {}
 
 def parse_price(value):
+    if pd.isna(value) or str(value).lower() == 'nan' or str(value) == '':
+        return 0.0
     try:
         clean_val = str(value).replace(' ', '').replace(',', '').replace('%', '')
-        return float(clean_val) if clean_val else 0.0
+        return float(clean_val)
     except:
         return 0.0
 
 def clean_dataframe(df):
     df = df.astype(str)
+    num_cols = len(df.columns)
     standard_names = ['Item', 'Nett', 'Gross', 'Markup']
-    df.columns = standard_names[:len(df.columns)] + [f"Col_{i}" for i in range(len(standard_names), len(df.columns))]
-    return df[df['Item'] != 'nan']
+    new_names = standard_names[:num_cols]
+    if num_cols > len(standard_names):
+        new_names += [f"Col_{i}" for i in range(len(standard_names), num_cols)]
+    df.columns = new_names
+    df = df[df['Item'] != 'nan']
+    df = df[~df['Item'].str.contains("Item|Quantity|Rand Value|Description", case=False, na=False)]
+    return df
 
-# --- PDF LOGIC ---
+# PDF Generation Function
 def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, vat, grand):
     pdf = FPDF()
     pdf.add_page()
@@ -113,30 +125,40 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(130, 7, "")
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
-    pdf.ln(40)
+    
+    pdf.ln(40) 
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(200, 10, "Client approval................................... Date...................... Order number......................", ln=True)
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- SIDEBAR ---
 st.sidebar.title("🛠 Settings")
 view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
-is_admin = (view_mode == "Advanced (Admin)" and st.sidebar.text_input("Password", type="password") == "admin123")
+is_admin = False
+if view_mode == "Advanced (Admin)":
+    pwd = st.sidebar.text_input("Enter Admin Password", type="password")
+    if pwd == "admin123": is_admin = True
+    else: st.sidebar.warning("Incorrect password")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("Data Source")
 data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
 data = pd.DataFrame()
 
 if data_option == "Upload CSV File":
-    uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
+    uploaded_file = st.sidebar.file_uploader("Upload your Sheet (Exported as CSV)", type="csv")
     if uploaded_file:
-        data = clean_dataframe(pd.read_csv(uploaded_file))
+        raw_df = pd.read_csv(uploaded_file)
+        data = clean_dataframe(raw_df)
 else:
     sheet_id = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ"
     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
     try:
-        data = clean_dataframe(pd.read_csv(csv_url, storage_options={'User-Agent': 'Mozilla/5.0'}))
+        raw_df = pd.read_csv(csv_url, storage_options={'User-Agent': 'Mozilla/5.0'})
+        data = clean_dataframe(raw_df)
     except:
-        st.sidebar.warning("⚠️ Data access error.")
+        st.sidebar.warning("⚠️ Google Sheet is Private.")
 
 # --- MAIN FORM ---
 if not data.empty:
@@ -150,72 +172,128 @@ if not data.empty:
     preprod_desc = c3.text_input("Preprod Description", value=loaded.get("Description", ""), key=f"pd_{count}")
     quote_date = c4.date_input("Date", datetime.date.today(), key=f"dt_{count}")
 
-    f1, f2, f3 = st.columns(3)
-    foil_height = f1.number_input("Height (mm)", min_value=0.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
-    foil_width = f2.number_input("Width (mm)", min_value=0.0, value=float(loaded.get("Foil_W", 0.0)), key=f"fw_{count}")
-    foil_code = f3.number_input("Foil Code", min_value=0.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
+    f1, f2, f3 = st.columns([1, 1, 1])
+    foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
+    foil_width = f2.number_input("Width (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_W", 0.0)), key=f"fw_{count}")
+    foil_code = f3.number_input("Foil Code", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
     cols = st.columns(header_cols)
-    cols[0].write("**Item Description**"); cols[1].write("**Quantity**"); cols[2].write("**Unit Price (R)**"); cols[3].write("**Gross Total (R)**")
+    cols[0].write("**Item Description**")
+    cols[1].write("**Quantity**")
+    cols[2].write("**Unit Price (R)**")
+    cols[3].write("**Gross Total (R)**")
+    if is_admin:
+        cols[4].write("**Nett Total (R)**")
+        cols[5].write("**Markup %**")
 
     item_entries = {}
     total_gross_sum = 0.0
-    
+    foil_qty_entered = 0.0
+
     for idx, row in data.iterrows():
         r = st.columns(header_cols)
         item_name = row['Item']
         r[0].write(item_name)
-        is_foil = "foil" in item_name.lower()
+        is_foil_row = "foil" in item_name.lower()
         
-        nett = foil_code if is_foil else parse_price(row.get('Nett', 0))
-        markup = 56.0 if is_foil else parse_price(row.get('Markup', 0))
-        calc_unit = nett * (1 + (markup / 100))
+        if is_foil_row:
+            calculated_unit_price = foil_code * 1.56
+            current_nett_unit = foil_code
+            markup_perc = 56.0
+        else:
+            current_nett_unit = parse_price(row.get('Nett', '0.00'))
+            markup_perc = parse_price(row.get('Markup', '0'))
+            calculated_unit_price = current_nett_unit * (1 + (markup_perc / 100))
 
-        qty = r[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{item_name}_Qty", 0.0)), key=f"qty_{idx}_{count}")
-        unit = r[2].number_input("Price", min_value=0.0, value=float(calc_unit), key=f"prc_{idx}_{count}")
+        saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
+        qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         
-        line_total = qty * unit
-        total_gross_sum += line_total
-        r[3].code(f"{line_total:,.2f}")
-        item_entries[item_name] = {"qty": qty, "unit": unit, "total": line_total}
+        if is_foil_row: foil_qty_entered = qty
+        unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
+        
+        line_total_gross = float(qty) * float(unit_price)
+        line_total_nett = float(qty) * float(current_nett_unit)
+        
+        total_gross_sum += line_total_gross
+        r[3].code(f"{line_total_gross:,.2f}") 
+        if is_admin:
+            r[4].write(f"{line_total_nett:,.2f}")
+            r[5].write(f"{markup_perc}%")
+        item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
 
     st.markdown("---")
-    vat_amount = total_gross_sum * 0.15
-    final_total = total_gross_sum + vat_amount
-    
-    act1, act2, act3 = st.columns(3)
-    
-    # PDF PREPARATION
-    pdf_filename = f"{preprod_ref}_{client_name}.pdf".replace(" ", "_").replace("/", "-")
-    pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_total)
+    res_c2 = st.columns([3, 3])[1]
+    with res_c2:
+        st.write("**Total (Excl. VAT):**")
+        st.code(f"R {total_gross_sum:,.2f}")
+        vat_amount = total_gross_sum * 0.15
+        st.write("**VAT (15%):**")
+        st.code(f"R {vat_amount:,.2f}")
+        final_grand_total = total_gross_sum + vat_amount
+        st.subheader(f"Grand Total: R {final_grand_total:,.2f}")
 
-    if act1.button("🚀 Save to Database"):
-        record = {"Client": client_name, "Preprod": preprod_ref, "Grand_Total": final_total}
-        for i, v in item_entries.items(): record[f"{i}_Qty"] = v["qty"]
-        st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
-        save_db(st.session_state.database)
-        st.success("Database Updated!")
+    act1, act2, act3 = st.columns([1, 1, 1])
+    
+    if act1.button("🚀 Finalize and Save to Database"):
+        if not client_name:
+            st.error("Missing Client Name.")
+        elif foil_qty_entered > 0 and foil_code == 0:
+            st.error("⚠️ Validation Error: Foil Quantity is entered but Foil Code is 0.")
+        else:
+            record = {
+                "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
+                "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, "Foil_C": foil_code, 
+                "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_grand_total
+            }
+            for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
+            st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
+            save_db(st.session_state.database)
+            st.success(f"Quote for {client_name} saved!")
 
-    if act2.button("💾 Save PDF to Desktop"):
-        save_path = DESKTOP_PATH.resolve() / pdf_filename
-        try:
+    # Clean Filename
+    pdf_filename = f"{preprod_ref}_{client_name}.pdf".replace(" ", "_")
+    
+    try:
+        pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
+        
+        # Action button to save directly to desktop folder
+        if act2.button("💾 Save PDF to Desktop Folder"):
+            save_path = DESKTOP_PATH / pdf_filename
             with open(save_path, "wb") as f:
                 f.write(pdf_bytes)
-            st.success(f"Saved to: {save_path}")
-            # Try to open the folder automatically
-            if platform.system() == "Windows":
-                os.startfile(DESKTOP_PATH)
-            elif platform.system() == "Darwin":
-                subprocess.Popen(["open", str(DESKTOP_PATH)])
-        except Exception as e:
-            st.error(f"Save Failed: {e}")
+            st.toast(f"✅ Saved to: {save_path}")
 
-    if act3.button("🔄 Clear Form"):
+    except Exception as e: act2.error(f"PDF Error: {e}")
+
+    if act3.button("🔄 Refresh / Clear Form"):
         st.session_state.reset_counter += 1
         st.session_state.loaded_data = {}
         st.rerun()
 
+    if not st.session_state.database.empty:
+        st.markdown("---")
+        with st.expander("📂 Database Search & Load", expanded=False):
+            search_term = st.text_input("🔍 Search").lower()
+            db = st.session_state.database
+            filtered_db = db[db['Client'].astype(str).str.lower().str.contains(search_term) | db['Preprod'].astype(str).str.lower().str.contains(search_term)]
+            st.dataframe(filtered_db)
+            if not filtered_db.empty:
+                col_l, col_m, col_r = st.columns(3)
+                original_idx = int(col_l.selectbox("Select ID:", filtered_db.index))
+                if col_l.button("📂 Load Selected"):
+                    st.session_state.loaded_data = db.loc[original_idx].to_dict()
+                    st.session_state.reset_counter += 1
+                    st.rerun()
+                if col_m.button("❌ Cancel Estimate"):
+                    st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
+                    save_db(st.session_state.database)
+                    st.rerun()
+                if col_r.button("🗑️ Delete from Database"):
+                    st.session_state.database = st.session_state.database.drop(original_idx).reset_index(drop=True)
+                    save_db(st.session_state.database)
+                    st.success("Entry permanently deleted.")
+                    st.rerun()
 else:
-    st.info("👈 Upload data in the sidebar to begin.")
+    st.info("👈 Use the Sidebar to upload your CSV file to begin.")
