@@ -258,7 +258,10 @@ if not data.empty:
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
         
-        # Action button to save directly to desktop folder
+        # Action button to download manually
+        act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
+        
+        # Action button to save directly to desktop folder (if local)
         if act2.button("💾 Save PDF to Desktop Folder"):
             save_path = DESKTOP_PATH / pdf_filename
             with open(save_path, "wb") as f:
