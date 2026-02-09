@@ -126,9 +126,12 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
     
-    pdf.ln(40) 
+    # --- UPDATED APPROVAL SECTION ---
+    pdf.ln(20) 
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(200, 10, "Client approval................................... Date...................... Order number......................", ln=True)
+    pdf.cell(200, 10, "Client Approval: ........................................................", ln=True)
+    pdf.cell(200, 10, "Date: ....................................", ln=True)
+    pdf.cell(200, 10, "Order Number: ...........................................................................", ln=True)
     
     return pdf.output(dest='S').encode('latin-1')
 
