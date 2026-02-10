@@ -8,6 +8,7 @@ PAD Print: Not required,675,1053,56
 HKx1:100-120mm (155mm plate),953.34,1487,56
 HKx1:130-150mm (183mm plate),1100.11,1533,56
 HKx1:150-180mm (208mm plate),1233.04,1294,56
+Silkscreen,500,625,25
 Barcode,115,192,67
 PDF (Artwork),35,55,57
 DTP (Design and F/A),780,780,0
