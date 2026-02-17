@@ -6,7 +6,7 @@ from fpdf import FPDF
 from pathlib import Path
 
 # --- CONFIGURATION ---
-st.set_page_config(layout="wide", page_title="Artwork and Repro Cost Estimate")
+st.set_page_config(layout="wide", page_title="Artwork and Repro cost Estimate")
 
 DB_FILE = "estimates_db.csv"
 # Define the path to the Desktop folder
@@ -255,8 +255,8 @@ if not data.empty:
             save_db(st.session_state.database)
             st.success(f"Quote for {client_name} saved!")
 
-    # Clean Filename
-    pdf_filename = f"{preprod_ref}_{client_name}.pdf".replace(" ", "_")
+    # Clean Filename - UPDATED TO INCLUDE PREPROD DESCRIPTION
+    pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
     
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
