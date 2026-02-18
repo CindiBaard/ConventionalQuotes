@@ -283,19 +283,43 @@ if not data.empty:
         with st.expander("📂 Database Search & Load", expanded=False):
             search_term = st.text_input("🔍 Search").lower()
             db = st.session_state.database
-            filtered_db = db[db['Client'].astype(str).str.lower().str.contains(search_term) | db['Preprod'].astype(str).str.lower().str.contains(search_term)]
+            
+            # Filter DB based on search
+            filtered_db = db[
+                db['Client'].astype(str).str.lower().str.contains(search_term) | 
+                db['Preprod'].astype(str).str.lower().str.contains(search_term)
+            ]
+            
             st.dataframe(filtered_db)
+            
             if not filtered_db.empty:
                 col_l, col_m, col_r = st.columns(3)
-                original_idx = int(col_l.selectbox("Select ID:", filtered_db.index))
+                
+                # --- MODIFIED SECTION START ---
+                # Create a list of labels like "REF123 - Client Name"
+                display_options = {
+                    idx: f"{row['Preprod']} - {row['Client']}" 
+                    for idx, row in filtered_db.iterrows()
+                }
+                
+                # Selectbox now shows the Preprod Ref and Client Name
+                original_idx = col_l.selectbox(
+                    "Select Estimate to Load:", 
+                    options=list(display_options.keys()), 
+                    format_func=lambda x: display_options[x]
+                )
+                # --- MODIFIED SECTION END ---
+
                 if col_l.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[original_idx].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
+                    
                 if col_m.button("❌ Cancel Estimate"):
                     st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
                     save_db(st.session_state.database)
                     st.rerun()
+                    
                 if col_r.button("🗑️ Delete from Database"):
                     st.session_state.database = st.session_state.database.drop(original_idx).reset_index(drop=True)
                     save_db(st.session_state.database)
