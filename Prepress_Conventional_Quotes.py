@@ -135,6 +135,7 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     
     return pdf.output(dest='S').encode('latin-1')
 
+Python
 # --- SIDEBAR ---
 st.sidebar.title("🛠 Settings")
 view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
@@ -145,6 +146,23 @@ if view_mode == "Advanced (Admin)":
     else: st.sidebar.warning("Incorrect password")
 
 st.sidebar.markdown("---")
+
+# --- NEW DOWNLOAD SECTION ---
+st.sidebar.subheader("💾 Export Database")
+if not st.session_state.database.empty:
+    csv_data = st.session_state.database.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        label="📥 Download Database as CSV",
+        data=csv_data,
+        file_name=f"quotes_database_{datetime.date.today()}.csv",
+        mime="text/csv",
+    )
+else:
+    st.sidebar.info("Database is currently empty.")
+
+st.sidebar.markdown("---")
+# --- END NEW DOWNLOAD SECTION ---
+
 st.sidebar.subheader("Data Source")
 data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
 data = pd.DataFrame()
