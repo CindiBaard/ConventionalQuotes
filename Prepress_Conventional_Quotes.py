@@ -135,7 +135,6 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     
     return pdf.output(dest='S').encode('latin-1')
 
-Python
 # --- SIDEBAR ---
 st.sidebar.title("🛠 Settings")
 view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
