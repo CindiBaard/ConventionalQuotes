@@ -172,7 +172,7 @@ if data_option == "Upload CSV File":
         raw_df = pd.read_csv(uploaded_file)
         data = clean_dataframe(raw_df)
 else:
-    sheet_id = "1BSA6lItqxS92NCAxrXoK6ey9AzNh1C3ExM98WTXqXo4"
+    sheet_id = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ"
     
     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
     try:
