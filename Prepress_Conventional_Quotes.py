@@ -10,14 +10,13 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(layout="wide", page_title="Artwork and Repro cost Estimate")
 
 # GOOGLE SHEETS CONFIGURATION
-# Replace the ID below with your actual Google Sheet ID
 SHEET_ID = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ" 
 DB_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
 
 # Establish Connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Define the path to the Desktop folder (Note: Only works on local machines)
+# --- FIX: Define DESKTOP_PATH (This was missing in your snippet) ---
 DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
 
 # Ensure the folder exists on the desktop
@@ -28,12 +27,10 @@ if not DESKTOP_PATH.exists():
         pass
 
 # Remove footer and tighten layout spacing
-# Updated CSS to keep the Sidebar accessible
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            /* Removed header visibility:hidden to ensure sidebar toggle stays visible */
             [data-testid="stHeader"] {
                 background: rgba(0,0,0,0);
                 color: rgba(0,0,0,0);
@@ -56,15 +53,17 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
-# --- DATABASE PERSISTENCE LOGIC (UPDATED FOR GOOGLE SHEETS) ---
+# --- DATABASE PERSISTENCE LOGIC ---
 def load_db():
     try:
-        # ttl=0 ensures we don't use cached data and always see new entries
-        return conn.read(spreadsheet=DB_URL, ttl=0)
+        # ttl=0 ensures we get live data from the sheet every time
+        df = conn.read(spreadsheet=DB_URL, ttl=0)
+        return df if df is not None else pd.DataFrame()
     except:
         return pd.DataFrame()
 
 def save_db(df):
+    # This writes the entire dataframe back to the Google Sheet
     conn.update(spreadsheet=DB_URL, data=df)
 
 # --- SESSION STATE INITIALIZATION ---
@@ -282,11 +281,16 @@ if not data.empty:
             }
             for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
             
-            # Update Session State and Google Sheets
+            # Combine existing DB with new record
             new_df = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
             st.session_state.database = new_df
-            save_db(new_df)
-            st.success(f"Quote for {client_name} saved to Google Sheets!")
+            
+            # SAVE TO GOOGLE SHEETS
+            try:
+                save_db(new_df)
+                st.success(f"Quote for {client_name} saved to Google Sheets!")
+            except Exception as e:
+                st.error(f"Error saving to Google Sheets: {e}")
 
     # Clean Filename
     pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
@@ -352,3 +356,5 @@ if not data.empty:
                     st.rerun()
 else:
     st.info("👈 Use the Sidebar to upload your CSV file to begin.")
+
+   
