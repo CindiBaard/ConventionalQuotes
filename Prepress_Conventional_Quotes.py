@@ -11,7 +11,7 @@ st.set_page_config(layout="wide", page_title="Artwork and Repro cost Estimate")
 
 # GOOGLE SHEETS CONFIGURATION
 # Replace the ID below with your actual Google Sheet ID
-SHEET_ID = "1UDivk0I3WxpH3vFPV4IstETG5PbKvUEuqgMmVR0BFyU" 
+SHEET_ID = "bdaf2b2b16a0f8f168f2ef1c23f48831bc469adf" 
 DB_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
 
 # Establish Connection
