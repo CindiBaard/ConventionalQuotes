@@ -4,12 +4,20 @@ import datetime
 import os
 from fpdf import FPDF
 from pathlib import Path
+from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Artwork and Repro cost Estimate")
 
-DB_FILE = "estimates_db.csv"
-# Define the path to the Desktop folder
+# GOOGLE SHEETS CONFIGURATION
+# Replace the ID below with your actual Google Sheet ID
+SHEET_ID = "1UDivk0I3WxpH3vFPV4IstETG5PbKvUEuqgMmVR0BFyU" 
+DB_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
+
+# Establish Connection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Define the path to the Desktop folder (Note: Only works on local machines)
 DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
 
 # Ensure the folder exists on the desktop
@@ -42,14 +50,16 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- DATABASE PERSISTENCE LOGIC ---
+# --- DATABASE PERSISTENCE LOGIC (UPDATED FOR GOOGLE SHEETS) ---
 def load_db():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
-    return pd.DataFrame()
+    try:
+        # ttl=0 ensures we don't use cached data and always see new entries
+        return conn.read(spreadsheet=DB_URL, ttl=0)
+    except:
+        return pd.DataFrame()
 
 def save_db(df):
-    df.to_csv(DB_FILE, index=False)
+    conn.update(spreadsheet=DB_URL, data=df)
 
 # --- SESSION STATE INITIALIZATION ---
 if 'database' not in st.session_state:
@@ -126,7 +136,6 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(30, 7, "Grand Total:", border=0)
     pdf.cell(30, 7, f"R {grand:,.2f}", ln=True)
     
-    # --- UPDATED APPROVAL SECTION ---
     pdf.ln(20) 
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(200, 10, "Client Approval: ........................................................", ln=True)
@@ -146,7 +155,7 @@ if view_mode == "Advanced (Admin)":
 
 st.sidebar.markdown("---")
 
-# --- NEW DOWNLOAD SECTION ---
+# --- EXPORT SECTION ---
 st.sidebar.subheader("💾 Export Database")
 if not st.session_state.database.empty:
     csv_data = st.session_state.database.to_csv(index=False).encode('utf-8')
@@ -160,7 +169,6 @@ else:
     st.sidebar.info("Database is currently empty.")
 
 st.sidebar.markdown("---")
-# --- END NEW DOWNLOAD SECTION ---
 
 st.sidebar.subheader("Data Source")
 data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
@@ -172,9 +180,7 @@ if data_option == "Upload CSV File":
         raw_df = pd.read_csv(uploaded_file)
         data = clean_dataframe(raw_df)
 else:
-    sheet_id = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ"
-    
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
+    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
     try:
         raw_df = pd.read_csv(csv_url, storage_options={'User-Agent': 'Mozilla/5.0'})
         data = clean_dataframe(raw_df)
@@ -269,20 +275,20 @@ if not data.empty:
                 "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_grand_total
             }
             for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
-            st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
-            save_db(st.session_state.database)
-            st.success(f"Quote for {client_name} saved!")
+            
+            # Update Session State and Google Sheets
+            new_df = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
+            st.session_state.database = new_df
+            save_db(new_df)
+            st.success(f"Quote for {client_name} saved to Google Sheets!")
 
-    # Clean Filename - UPDATED TO INCLUDE PREPROD DESCRIPTION
+    # Clean Filename
     pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
     
     try:
         pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
-        
-        # Action button to download manually
         act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
         
-        # Action button to save directly to desktop folder (if local)
         if act2.button("💾 Save PDF to Desktop Folder"):
             save_path = DESKTOP_PATH / pdf_filename
             with open(save_path, "wb") as f:
@@ -302,7 +308,6 @@ if not data.empty:
             search_term = st.text_input("🔍 Search").lower()
             db = st.session_state.database
             
-            # Filter DB based on search
             filtered_db = db[
                 db['Client'].astype(str).str.lower().str.contains(search_term) | 
                 db['Preprod'].astype(str).str.lower().str.contains(search_term)
@@ -313,20 +318,16 @@ if not data.empty:
             if not filtered_db.empty:
                 col_l, col_m, col_r = st.columns(3)
                 
-                # --- MODIFIED SECTION START ---
-                # Create a list of labels like "REF123 - Client Name"
                 display_options = {
                     idx: f"{row['Preprod']} - {row['Client']}" 
                     for idx, row in filtered_db.iterrows()
                 }
                 
-                # Selectbox now shows the Preprod Ref and Client Name
                 original_idx = col_l.selectbox(
                     "Select Estimate to Load:", 
                     options=list(display_options.keys()), 
                     format_func=lambda x: display_options[x]
                 )
-                # --- MODIFIED SECTION END ---
 
                 if col_l.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[original_idx].to_dict()
