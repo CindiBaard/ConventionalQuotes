@@ -28,16 +28,21 @@ if not DESKTOP_PATH.exists():
         pass
 
 # Remove footer and tighten layout spacing
+# Updated CSS to keep the Sidebar accessible
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            header {visibility: hidden;}
+            /* Removed header visibility:hidden to ensure sidebar toggle stays visible */
+            [data-testid="stHeader"] {
+                background: rgba(0,0,0,0);
+                color: rgba(0,0,0,0);
+            }
             .block-container {
-                padding-top: 1rem;
+                padding-top: 2rem;
                 padding-bottom: 0rem;
-                padding-left: 5rem;
-                padding-right: 5rem;
+                padding-left: 2rem;
+                padding-right: 2rem;
             }
             [data-testid="stMarkdownContainer"] p {
                 margin-bottom: 0.2rem;
@@ -49,6 +54,7 @@ hide_st_style = """
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
+What changed?
 
 # --- DATABASE PERSISTENCE LOGIC (UPDATED FOR GOOGLE SHEETS) ---
 def load_db():
