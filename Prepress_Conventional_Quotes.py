@@ -271,36 +271,14 @@ if not data.empty:
                     db['Preprod'].astype(str).str.lower().str.contains(search_term)
                 ]
                 
-                # Define columns to hide (A, B, C, D equivalent)
-                cols_to_hide = ["Status", "Client", "Preprod", "Description"]
-                
-                # Get all columns and filter out the hidden ones for display
-                display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
-
-                # Render the dataframe with hidden columns
-                st.dataframe(
-                    filtered_db,
-                    column_order=display_columns, # Only show columns NOT in our hidden list
-                    use_container_width=True
-                )
+                st.dataframe(filtered_db)
                 
                 if not filtered_db.empty:
                     col_l, col_m, col_r = st.columns(3)
-                    
-                    # We still use 'Preprod' and 'Client' here so the user knows what they are loading
-                    display_options = {
-                        idx: f"{row['Preprod']} - {row['Client']}" 
-                        for idx, row in filtered_db.iterrows()
-                    }
-                    
-                    original_idx = col_l.selectbox(
-                        "Select Estimate to Load:", 
-                        options=list(display_options.keys()), 
-                        format_func=lambda x: display_options[x]
-                    )
+                    display_options = {idx: f"{row['Preprod']} - {row['Client']}" for idx, row in filtered_db.iterrows()}
+                    original_idx = col_l.selectbox("Select Estimate to Load:", options=list(display_options.keys()), format_func=lambda x: display_options[x])
 
                     if col_l.button("📂 Load Selected"):
-                        # This loads the FULL row (including hidden columns) into session state
                         st.session_state.loaded_data = db.loc[original_idx].to_dict()
                         st.session_state.reset_counter += 1
                         st.rerun()
@@ -317,3 +295,5 @@ if not data.empty:
                         st.rerun()
             else:
                 st.warning("⚠️ Database columns missing. Save a new entry to initialize the structure.")
+else:
+    st.info("👈 Use the Sidebar to upload your CSV file to begin.")
