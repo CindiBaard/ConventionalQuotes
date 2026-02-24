@@ -272,7 +272,7 @@ if not data.empty:
                 
                 # --- HIDE COLUMNS FROM VIEW ---
                 # We hide the metadata (A-D) AND the calculation columns you requested
-                cols_to_hide = ["Status", "Client", "Preprod", "Description", "Item", "Nett", "Gross", "Markup"]
+                cols_to_hide = ["Item", "Nett", "Gross", "Markup"]
                 display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
 
                 st.dataframe(
