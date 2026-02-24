@@ -264,14 +264,22 @@ if not data.empty:
             search_term = st.text_input("🔍 Search").lower()
             db = st.session_state.database
             
-            # CHECK: Only filter if 'Client' and 'Preprod' columns exist
             if "Client" in db.columns and "Preprod" in db.columns:
                 filtered_db = db[
                     db['Client'].astype(str).str.lower().str.contains(search_term) | 
                     db['Preprod'].astype(str).str.lower().str.contains(search_term)
                 ]
                 
-                st.dataframe(filtered_db)
+                # --- HIDE COLUMNS FROM VIEW ---
+                # We hide the metadata (A-D) AND the calculation columns you requested
+                cols_to_hide = ["Status", "Client", "Preprod", "Description", "Item", "Nett", "Gross", "Markup"]
+                display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
+
+                st.dataframe(
+                    filtered_db,
+                    column_order=display_columns,
+                    use_container_width=True
+                )
                 
                 if not filtered_db.empty:
                     col_l, col_m, col_r = st.columns(3)
@@ -294,6 +302,6 @@ if not data.empty:
                         st.success("Deleted.")
                         st.rerun()
             else:
-                st.warning("⚠️ Database columns missing. Save a new entry to initialize the structure.")
+                st.warning("⚠️ Database columns missing. Save a new entry to initialize.")
 else:
     st.info("👈 Use the Sidebar to upload your CSV file to begin.")
