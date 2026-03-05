@@ -129,6 +129,25 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.cell(200, 10, "Order Number: ...........................................................................", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
+# --- SIDEBAR & DATA LOADING ---
+st.sidebar.title("🛠 Settings")
+
+# INITIALIZE DATA AS EMPTY DATAFRAME TO PREVENT NAMEERROR
+data = pd.DataFrame()
+
+data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
+
+if data_option == "Upload CSV File":
+    uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
+    if uploaded_file:
+        data = clean_dataframe(pd.read_csv(uploaded_file))
+else:
+    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+    try:
+        data = clean_dataframe(pd.read_csv(csv_url, storage_options={'User-Agent': 'Mozilla/5.0'}))
+    except:
+        st.sidebar.warning("⚠️ Google Sheet unreachable.")
+
 # --- MAIN FORM ---
 if not data.empty:
     st.title("📋 Bowler Artwork and Repro Cost Estimate")
@@ -142,7 +161,7 @@ if not data.empty:
     preprod_desc = c3.text_input("Preprod Description", value=loaded.get("Description", ""), key=f"pd_{count}")
     quote_date = c4.date_input("Date", datetime.date.today(), key=f"dt_{count}")
 
-    # 2. Foil Block Specifications (Foil Block Qty REMOVED from here)
+    # 2. Foil Block Specifications (Foil Block Qty Removed)
     st.markdown("**Foil Block Specifications:**")
     f1, f2, f3 = st.columns([1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
@@ -150,13 +169,17 @@ if not data.empty:
     foil_code = f3.number_input("Foil Code", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
-    header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
+    header_cols = [3, 1, 1, 1]
     cols = st.columns(header_cols)
-    cols[0].write("**Item Description**"); cols[1].write("**Quantity**"); cols[2].write("**Unit Price (R)**"); cols[3].write("**Gross Total (R)**")
+    cols[0].write("**Item Description**")
+    cols[1].write("**Quantity**")
+    cols[2].write("**Unit Price (R)**")
+    cols[3].write("**Gross Total (R)**")
 
-    item_entries = {}; total_gross_sum = 0.0
+    item_entries = {}
+    total_gross_sum = 0.0
 
-    # Separate logic to filter out Foil row from the main loop so we can put it at the bottom
+    # Separate logic for Foil row
     main_items = data[~data['Item'].str.lower().str.contains("foil")]
     foil_data_row = data[data['Item'].str.lower().str.contains("foil")].head(1)
 
@@ -170,6 +193,7 @@ if not data.empty:
         markup_perc = parse_price(row.get('Markup', '0'))
         calc_price = current_nett_unit * (1 + (markup_perc / 100))
 
+        # Quantity and Unit Price text boxes
         qty = r[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{item_name}_Qty", 0.0)), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         unit_p = r[2].number_input("Price", min_value=0.0, value=float(calc_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
@@ -178,17 +202,17 @@ if not data.empty:
         r[3].code(f"{line_total:,.2f}")
         item_entries[item_name] = {"qty": qty, "unit": unit_p, "total": line_total}
 
-    # 4. Render Foil Block at the BOTTOM
+    # 4. Render Foil Block at the BOTTOM with Auto-Calculation
     if not foil_data_row.empty:
         st.markdown("---")
         fr = st.columns(header_cols)
-        f_row = foil_data_row.iloc[0]
-        f_item_name = f_row['Item']
+        f_item_name = foil_data_row.iloc[0]['Item']
         fr[0].write(f"**{f_item_name}**")
         
-        # Logic: Copy Foil Code + 56% Markup
+        # Logic: Auto-copy Foil Code + 56% Markup
         f_calc_price = foil_code * 1.56
         
+        # Quantity and Unit Price text boxes for Foil Block
         f_qty = fr[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{f_item_name}_Qty", 0.0)), step=1.0, key=f"fqty_{count}", label_visibility="collapsed")
         f_unit_p = fr[2].number_input("Price", min_value=0.0, value=float(f_calc_price), key=f"fprc_{count}", label_visibility="collapsed")
         
@@ -197,17 +221,19 @@ if not data.empty:
         fr[3].code(f"{f_line_total:,.2f}")
         item_entries[f_item_name] = {"qty": f_qty, "unit": f_unit_p, "total": f_line_total}
 
-    # 5. Totals Section
+    # 5. Totals
     st.markdown("---")
     res_c2 = st.columns([3, 3])[1]
     with res_c2:
-        st.write("**Total (Excl. VAT):**"); st.code(f"R {total_gross_sum:,.2f}")
+        st.write("**Total (Excl. VAT):**")
+        st.code(f"R {total_gross_sum:,.2f}")
         vat_amount = total_gross_sum * 0.15
-        st.write("**VAT (15%):**"); st.code(f"R {vat_amount:,.2f}")
+        st.write("**VAT (15%):**")
+        st.code(f"R {vat_amount:,.2f}")
         final_grand_total = total_gross_sum + vat_amount
         st.subheader(f"Grand Total: R {final_grand_total:,.2f}")
 
-    # 6. Actions
+    # 6. Buttons
     act1, act2, act3 = st.columns([1, 1, 1])
     if act1.button("🚀 Finalize and Save to Database"):
         record = {
@@ -217,13 +243,12 @@ if not data.empty:
         }
         for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
         save_db(pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True))
-        st.success("Saved!")
-
-    pdf_filename = f"{preprod_ref}_{client_name}.pdf".replace(" ", "_")
-    pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
-    act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
+        st.success("Record Saved!")
 
     if act3.button("🔄 Refresh Form"):
         st.session_state.reset_counter += 1
         st.session_state.loaded_data = {}
         st.rerun()
+
+else:
+    st.info("👈 Use the Sidebar to upload your CSV file or connect to Google Sheets to begin.")
