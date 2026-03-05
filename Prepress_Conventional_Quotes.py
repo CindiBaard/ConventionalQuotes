@@ -1,7 +1,3 @@
-To include the Foil Block_Qty in your Streamlit application, I have updated the code to ensure it is captured in the main form, stored in the database record, and correctly reloaded when searching past estimates.
-
-Here is the updated code:
-
 Python
 import streamlit as st
 import pandas as pd
