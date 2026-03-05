@@ -131,12 +131,9 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
 
 # --- SIDEBAR & DATA LOADING ---
 st.sidebar.title("🛠 Settings")
-
-# INITIALIZE DATA AS EMPTY DATAFRAME TO PREVENT NAMEERROR
 data = pd.DataFrame()
 
 data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
-
 if data_option == "Upload CSV File":
     uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
     if uploaded_file:
@@ -150,7 +147,7 @@ else:
 
 # --- MAIN FORM ---
 if not data.empty:
-    st.title("📋 Bowler Artwork and Repro Cost Estimate")
+    st.title("📋 Bowler Artwork and Repro cost Estimate")
     count = st.session_state.reset_counter
     loaded = st.session_state.loaded_data
     
@@ -161,7 +158,7 @@ if not data.empty:
     preprod_desc = c3.text_input("Preprod Description", value=loaded.get("Description", ""), key=f"pd_{count}")
     quote_date = c4.date_input("Date", datetime.date.today(), key=f"dt_{count}")
 
-    # 2. Foil Block Specifications (Foil Block Qty Removed)
+    # 2. Foil Block Specifications
     st.markdown("**Foil Block Specifications:**")
     f1, f2, f3 = st.columns([1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
@@ -179,10 +176,9 @@ if not data.empty:
     item_entries = {}
     total_gross_sum = 0.0
 
-    # Separate logic for Foil row
+    # Logic to separate regular items and the Foil item
     main_items = data[~data['Item'].str.lower().str.contains("foil")]
-    foil_data_row = data[data['Item'].str.lower().str.contains("foil")].head(1)
-
+    
     # 3. Render Main Items
     for idx, row in main_items.iterrows():
         r = st.columns(header_cols)
@@ -193,7 +189,6 @@ if not data.empty:
         markup_perc = parse_price(row.get('Markup', '0'))
         calc_price = current_nett_unit * (1 + (markup_perc / 100))
 
-        # Quantity and Unit Price text boxes
         qty = r[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{item_name}_Qty", 0.0)), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
         unit_p = r[2].number_input("Price", min_value=0.0, value=float(calc_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
         
@@ -202,24 +197,26 @@ if not data.empty:
         r[3].code(f"{line_total:,.2f}")
         item_entries[item_name] = {"qty": qty, "unit": unit_p, "total": line_total}
 
-    # 4. Render Foil Block at the BOTTOM with Auto-Calculation
-    if not foil_data_row.empty:
-        st.markdown("---")
-        fr = st.columns(header_cols)
-        f_item_name = foil_data_row.iloc[0]['Item']
-        fr[0].write(f"**{f_item_name}**")
-        
-        # Logic: Auto-copy Foil Code + 56% Markup
-        f_calc_price = foil_code * 1.56
-        
-        # Quantity and Unit Price text boxes for Foil Block
-        f_qty = fr[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{f_item_name}_Qty", 0.0)), step=1.0, key=f"fqty_{count}", label_visibility="collapsed")
-        f_unit_p = fr[2].number_input("Price", min_value=0.0, value=float(f_calc_price), key=f"fprc_{count}", label_visibility="collapsed")
-        
-        f_line_total = float(f_qty) * float(f_unit_p)
-        total_gross_sum += f_line_total
-        fr[3].code(f"{f_line_total:,.2f}")
-        item_entries[f_item_name] = {"qty": f_qty, "unit": f_unit_p, "total": f_line_total}
+    # 4. Render Foil Block at the BOTTOM
+    st.markdown("---")
+    fr = st.columns(header_cols)
+    
+    # Determine the name (either from data or default)
+    foil_name_search = data[data['Item'].str.lower().str.contains("foil")]
+    f_item_name = foil_name_search.iloc[0]['Item'] if not foil_name_search.empty else "Foil Block"
+    
+    fr[0].write(f"**{f_item_name}**")
+    
+    # AUTO-CALCULATION: Foil Code + 56% Markup
+    f_calc_price = foil_code * 1.56
+    
+    f_qty = fr[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{f_item_name}_Qty", 0.0)), step=1.0, key=f"fqty_{count}", label_visibility="collapsed")
+    f_unit_p = fr[2].number_input("Price", min_value=0.0, value=float(f_calc_price), key=f"fprc_{count}", label_visibility="collapsed")
+    
+    f_line_total = float(f_qty) * float(f_unit_p)
+    total_gross_sum += f_line_total
+    fr[3].code(f"{f_line_total:,.2f}")
+    item_entries[f_item_name] = {"qty": f_qty, "unit": f_unit_p, "total": f_line_total}
 
     # 5. Totals
     st.markdown("---")
