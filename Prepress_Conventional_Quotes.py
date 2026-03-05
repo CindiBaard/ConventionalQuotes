@@ -14,7 +14,7 @@ SHEET_ID = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ"
 DB_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
 
 # Establish Connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+conn = st.connection("gsheets", type="gsheets")
 
 # --- DIRECTORY SETUP ---
 DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
@@ -174,7 +174,7 @@ if not data.empty:
     preprod_desc = c3.text_input("Preprod Description", value=loaded.get("Description", ""), key=f"pd_{count}")
     quote_date = c4.date_input("Date", datetime.date.today(), key=f"dt_{count}")
 
-    # Foil Block Description (Now directly underneath PDF Info)
+    # Foil Block Specifications (Directly underneath PDF info)
     st.markdown("**Foil Block Specifications:**")
     f1, f2, f3, f4 = st.columns([1, 1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
@@ -185,8 +185,13 @@ if not data.empty:
     st.markdown("---")
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
     cols = st.columns(header_cols)
-    cols[0].write("**Item Description**"); cols[1].write("**Quantity**"); cols[2].write("**Unit Price (R)**"); cols[3].write("**Gross Total (R)**")
-    if is_admin: cols[4].write("**Nett Total (R)**"); cols[5].write("**Markup %**")
+    cols[0].write("**Item Description**")
+    cols[1].write("**Quantity**")
+    cols[2].write("**Unit Price (R)**")
+    cols[3].write("**Gross Total (R)**")
+    if is_admin: 
+        cols[4].write("**Nett Total (R)**")
+        cols[5].write("**Markup %**")
 
     item_entries = {}; total_gross_sum = 0.0; foil_qty_entered = 0.0
 
@@ -194,10 +199,11 @@ if not data.empty:
         r = st.columns(header_cols)
         item_name = row['Item']
         r[0].write(item_name)
+        
         is_foil_row = "foil" in item_name.lower()
         
-        # LOGIC: If Foil Code is inserted, calculate unit price with 56% markup
         if is_foil_row:
+            # If user puts an amount in Foil Code, it copies here + 56% markup
             calculated_unit_price = foil_code * 1.56
             current_nett_unit = foil_code
             markup_perc = 56.0
@@ -208,4 +214,121 @@ if not data.empty:
 
         # Quantity Box
         saved_qty = loaded.get(f"{item_name}_Qty", 0.0)
-        qty = r[1].number_input("Qty", min_value=0.0
+        qty = r[1].number_input("Qty", min_value=0.0, value=float(saved_qty), step=1.0, key=f"qty_{idx}_{count}", label_visibility="collapsed")
+        
+        if is_foil_row: 
+            foil_qty_entered = qty
+        
+        # Unit Price Box
+        unit_price = r[2].number_input("Price", min_value=0.0, value=float(calculated_unit_price), key=f"prc_{idx}_{count}", label_visibility="collapsed")
+        
+        # Gross Total Box (Visualized with st.code for box effect)
+        line_total_gross = float(qty) * float(unit_price)
+        total_gross_sum += line_total_gross
+        r[3].code(f"{line_total_gross:,.2f}")
+        
+        if is_admin:
+            r[4].write(f"{float(qty)*current_nett_unit:,.2f}")
+            r[5].write(f"{markup_perc}%")
+            
+        item_entries[item_name] = {"qty": qty, "unit": unit_price, "total": line_total_gross}
+
+    st.markdown("---")
+    res_c2 = st.columns([3, 3])[1]
+    with res_c2:
+        st.write("**Total (Excl. VAT):**")
+        st.code(f"R {total_gross_sum:,.2f}")
+        vat_amount = total_gross_sum * 0.15
+        st.write("**VAT (15%):**")
+        st.code(f"R {vat_amount:,.2f}")
+        final_grand_total = total_gross_sum + vat_amount
+        st.subheader(f"Grand Total: R {final_grand_total:,.2f}")
+
+    act1, act2, act3 = st.columns([1, 1, 1])
+    
+    if act1.button("🚀 Finalize and Save to Database"):
+        if not client_name: 
+            st.error("Missing Client Name.")
+        elif foil_qty_entered > 0 and foil_code == 0: 
+            st.error("⚠️ Foil Qty entered but Foil Code is 0.")
+        else:
+            record = {
+                "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
+                "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, "Foil_C": foil_code, 
+                "Foil Block_Qty": foil_block_qty,
+                "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_grand_total
+            }
+            for item, vals in item_entries.items(): 
+                record[f"{item}_Qty"] = vals["qty"]
+            
+            new_df = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
+            try:
+                save_db(new_df)
+                st.session_state.database = new_df
+                st.success(f"Saved to Google Sheets!")
+            except Exception as e: 
+                st.error(f"Save Error: {e}")
+
+    pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
+    try:
+        pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, foil_block_qty, item_entries, total_gross_sum, vat_amount, final_grand_total)
+        act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
+        if act2.button("💾 Save PDF to Desktop Folder"):
+            save_path = DESKTOP_PATH / pdf_filename
+            with open(save_path, "wb") as f: 
+                f.write(pdf_bytes)
+            st.toast(f"✅ Saved to: {save_path}")
+    except Exception as e: 
+        act2.error(f"PDF Error: {e}")
+
+    if act3.button("🔄 Refresh / Clear Form"):
+        st.session_state.reset_counter += 1
+        st.session_state.loaded_data = {}
+        st.rerun()
+
+    # --- DATABASE SEARCH & LOAD SECTION ---
+    if not st.session_state.database.empty:
+        st.markdown("---")
+        with st.expander("📂 Database Search & Load", expanded=False):
+            search_term = st.text_input("🔍 Search").lower()
+            db = st.session_state.database
+            
+            if "Client" in db.columns and "Preprod" in db.columns:
+                filtered_db = db[
+                    db['Client'].astype(str).str.lower().str.contains(search_term) | 
+                    db['Preprod'].astype(str).str.lower().str.contains(search_term)
+                ]
+                
+                cols_to_hide = ["Item", "Nett", "Gross", "Markup"]
+                display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
+
+                st.dataframe(
+                    filtered_db,
+                    column_order=display_columns,
+                    use_container_width=True
+                )
+                
+                if not filtered_db.empty:
+                    col_l, col_m, col_r = st.columns(3)
+                    display_options = {idx: f"{row['Preprod']} - {row['Client']}" for idx, row in filtered_db.iterrows()}
+                    original_idx = col_l.selectbox("Select Estimate to Load:", options=list(display_options.keys()), format_func=lambda x: display_options[x])
+
+                    if col_l.button("📂 Load Selected"):
+                        st.session_state.loaded_data = db.loc[original_idx].to_dict()
+                        st.session_state.reset_counter += 1
+                        st.rerun()
+                        
+                    if col_m.button("❌ Cancel Estimate"):
+                        st.session_state.database.at[original_idx, 'Status'] = "CANCELLED"
+                        save_db(st.session_state.database)
+                        st.rerun()
+                        
+                    if col_r.button("🗑️ Delete"):
+                        st.session_state.database = st.session_state.database.drop(original_idx).reset_index(drop=True)
+                        save_db(st.session_state.database)
+                        st.success("Deleted.")
+                        st.rerun()
+            else:
+                st.warning("⚠️ Database columns missing. Save a new entry to initialize.")
+else:
+    st.info("👈 Use the Sidebar to upload your CSV file to begin.")
