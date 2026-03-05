@@ -1,3 +1,8 @@
+To include the Foil Block_Qty in your Streamlit application, I have updated the code to ensure it is captured in the main form, stored in the database record, and correctly reloaded when searching past estimates.
+
+Here is the updated code:
+
+Python
 import streamlit as st
 import pandas as pd
 import datetime
@@ -80,7 +85,7 @@ def clean_dataframe(df):
     df = df[~df['Item'].str.contains("Item|Quantity|Rand Value|Description", case=False, na=False)]
     return df
 
-def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, vat, grand):
+def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, foil_qty, items, total, vat, grand):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
@@ -95,9 +100,10 @@ def create_pdf(client, ref, desc, date, foil_h, foil_w, foil_c, items, total, va
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(200, 7, "Foil Block Specifications:", ln=True)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(60, 7, f"Height: {foil_h} mm")
-    pdf.cell(60, 7, f"Width: {foil_w} mm")
-    pdf.cell(60, 7, f"Code: {foil_c}", ln=True)
+    pdf.cell(50, 7, f"Height: {foil_h} mm")
+    pdf.cell(50, 7, f"Width: {foil_w} mm")
+    pdf.cell(50, 7, f"Code: {foil_c}")
+    pdf.cell(50, 7, f"Block Qty: {foil_qty}", ln=True)
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(100, 7, "Item Description", border=1)
@@ -172,10 +178,11 @@ if not data.empty:
     preprod_desc = c3.text_input("Preprod Description", value=loaded.get("Description", ""), key=f"pd_{count}")
     quote_date = c4.date_input("Date", datetime.date.today(), key=f"dt_{count}")
 
-    f1, f2, f3 = st.columns([1, 1, 1])
+    f1, f2, f3, f4 = st.columns([1, 1, 1, 1])
     foil_height = f1.number_input("Height (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_H", 0.0)), key=f"fh_{count}")
     foil_width = f2.number_input("Width (mm)", min_value=0.0, step=1.0, value=float(loaded.get("Foil_W", 0.0)), key=f"fw_{count}")
     foil_code = f3.number_input("Foil Code", min_value=0.0, step=1.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
+    foil_block_qty = f4.number_input("Foil Block Qty", min_value=0.0, step=1.0, value=float(loaded.get("Foil Block_Qty", 0.0)), key=f"fbq_{count}")
 
     st.markdown("---")
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
@@ -231,6 +238,7 @@ if not data.empty:
             record = {
                 "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, 
                 "Date": str(quote_date), "Foil_H": foil_height, "Foil_W": foil_width, "Foil_C": foil_code, 
+                "Foil Block_Qty": foil_block_qty,
                 "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_grand_total
             }
             for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
@@ -244,7 +252,7 @@ if not data.empty:
 
     pdf_filename = f"{preprod_ref}_{client_name}_{preprod_desc}.pdf".replace(" ", "_")
     try:
-        pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, item_entries, total_gross_sum, vat_amount, final_grand_total)
+        pdf_bytes = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, foil_height, foil_width, foil_code, foil_block_qty, item_entries, total_gross_sum, vat_amount, final_grand_total)
         act2.download_button(label="📥 Download PDF", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf")
         if act2.button("💾 Save PDF to Desktop Folder"):
             save_path = DESKTOP_PATH / pdf_filename
@@ -271,7 +279,6 @@ if not data.empty:
                 ]
                 
                 # --- HIDE COLUMNS FROM VIEW ---
-                # We hide the metadata (A-D) AND the calculation columns you requested
                 cols_to_hide = ["Item", "Nett", "Gross", "Markup"]
                 display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
 
