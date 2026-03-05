@@ -40,14 +40,12 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 # --- DATABASE PERSISTENCE LOGIC ---
 def load_db():
     try:
-        # Pulls the latest data from Google Sheets
         df = conn.read(spreadsheet=DB_URL, ttl=0)
         return df if df is not None else pd.DataFrame()
     except:
         return pd.DataFrame()
 
 def save_db(df):
-    # Permanently writes the dataframe to Google Sheets
     conn.update(spreadsheet=DB_URL, data=df)
 
 # --- SESSION STATE INITIALIZATION ---
@@ -115,7 +113,7 @@ if not data.empty:
     count = st.session_state.reset_counter
     loaded = st.session_state.loaded_data
     
-    # Header Info
+    # 1. Header Info
     c1, c2, c3, c4 = st.columns([1.5, 1, 2, 1])
     client_name = c1.text_input("Client Name", value=loaded.get("Client", ""), key=f"cl_{count}")
     preprod_ref = c2.text_input("Preprod Ref", value=loaded.get("Preprod", ""), key=f"pr_{count}")
@@ -138,6 +136,7 @@ if not data.empty:
     item_entries = {}; total_gross_sum = 0.0
     main_items = data[~data['Item'].str.lower().str.contains("foil")]
     
+    # 2. Render Main Items
     for idx, row in main_items.iterrows():
         r = st.columns(header_cols)
         item_name = row['Item']
@@ -159,25 +158,28 @@ if not data.empty:
             r[5].write(f"{markup}%")
         item_entries[item_name] = {"qty": qty, "unit": unit_p, "total": line_total}
 
-    # FOIL BLOCK (Bottom Placement + Auto-Markup)
-    st.markdown("---")
+    # 3. Render Foil Block (Removed bold and dividers)
     fr = st.columns(header_cols)
     foil_name_search = data[data['Item'].str.lower().str.contains("foil")]
     f_item_name = foil_name_search.iloc[0]['Item'] if not foil_name_search.empty else "Foil Block"
-    fr[0].write(f"**{f_item_name}**")
     
-    f_calc_price = foil_code * 1.56 # 56% Markup logic
+    # Text weight matched to other items
+    fr[0].write(f_item_name)
+    
+    f_calc_price = foil_code * 1.56
     f_qty = fr[1].number_input("Qty", min_value=0.0, value=float(loaded.get(f"{f_item_name}_Qty", 0.0)), step=1.0, key=f"fqty_{count}", label_visibility="collapsed")
     f_unit_p = fr[2].number_input("Price", min_value=0.0, value=float(f_calc_price), key=f"fprc_{count}", label_visibility="collapsed")
     
     f_line_total = float(f_qty) * float(f_unit_p)
     total_gross_sum += f_line_total
     fr[3].code(f"{f_line_total:,.2f}")
+    
     if is_admin:
         fr[4].write(f"{float(f_qty) * foil_code:,.2f}")
         fr[5].write("56%")
     item_entries[f_item_name] = {"qty": f_qty, "unit": f_unit_p, "total": f_line_total}
 
+    # 4. Totals
     st.markdown("---")
     res_c2 = st.columns([3, 3])[1]
     with res_c2:
@@ -187,7 +189,7 @@ if not data.empty:
         final_grand_total = total_gross_sum + vat_amount
         st.subheader(f"Grand Total: R {final_grand_total:,.2f}")
 
-    # BUTTON ACTIONS
+    # 5. Buttons
     act1, act2, act3 = st.columns([1, 1, 1])
     if act1.button("🚀 Finalize and Save to Google Sheets"):
         record = {
@@ -197,7 +199,6 @@ if not data.empty:
         }
         for item, vals in item_entries.items(): record[f"{item}_Qty"] = vals["qty"]
         
-        # This updates the permanent database
         new_df = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
         save_db(new_df)
         st.session_state.database = new_df
@@ -208,7 +209,7 @@ if not data.empty:
         st.session_state.loaded_data = {}
         st.rerun()
 
-    # --- DATABASE SEARCH & LOAD SECTION ---
+    # 6. Database Search
     if not st.session_state.database.empty:
         st.markdown("---")
         with st.expander("📂 Database Search & Load", expanded=False):
@@ -220,7 +221,6 @@ if not data.empty:
                 db['Preprod'].astype(str).str.lower().str.contains(search_term)
             ]
             
-            # Hide technical calculation columns in view
             cols_to_hide = ["Item", "Nett", "Gross", "Markup"]
             display_columns = [col for col in filtered_db.columns if col not in cols_to_hide]
             st.dataframe(filtered_db, column_order=display_columns, use_container_width=True)
