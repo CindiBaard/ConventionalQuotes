@@ -14,7 +14,7 @@ SHEET_ID = "1zHOIawXjuufNYXymRxOWGghd6BQ8aXdZs7ve3P8fBYQ"
 DB_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
 
 # Establish Connection
-conn = st.connection("gsheets", type="gsheets")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- DIRECTORY SETUP ---
 DESKTOP_PATH = Path.home() / "Desktop" / "Conventional Quotes"
