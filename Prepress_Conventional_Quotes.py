@@ -7,7 +7,30 @@ from pathlib import Path
 from streamlit_gsheets import GSheetsConnection
 import io
 
-# --- CONFIGURATION ---
+# --- SIDEBAR & DATA LOADING ---
+st.sidebar.title("🛠 Settings")
+
+# 1. INITIALIZE DATA HERE TO PREVENT NameError
+data = pd.DataFrame() 
+
+view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
+
+# ... (rest of your admin password logic) ...
+
+st.sidebar.markdown("---")
+data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
+
+if data_option == "Upload CSV File":
+    uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
+    if uploaded_file:
+        data = clean_dataframe(pd.read_csv(uploaded_file))
+else:
+    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+    try:
+        data = clean_dataframe(pd.read_csv(csv_url, storage_options={'User-Agent': 'Mozilla/5.0'}))
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ Google Sheet unreachable: {e}")
+        # data remains an empty DataFrame from the initialization above# --- CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Artwork and Repro cost Estimate")
 
 # GOOGLE SHEETS CONFIGURATION
