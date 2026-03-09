@@ -251,19 +251,20 @@ if 'loaded_data' not in st.session_state: st.session_state.loaded_data = {}
 
 # --- 5. SIDEBAR ---
 st.sidebar.title("🛠 Settings")
-view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
-is_admin = (view_mode == "Advanced (Admin)" and st.sidebar.text_input("Password", type="password") == "admin123")
 
-data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
-if data_option == "Upload CSV File":
-    uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
-    if uploaded_file: data = clean_dataframe(pd.read_csv(uploaded_file))
-else:
-    try:
-        csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
-        data = clean_dataframe(pd.read_csv(csv_url))
-    except: st.sidebar.warning("⚠️ Google Sheet unreachable.")
+# Added a unique key "main_view_mode" to prevent DuplicateElementId
+view_mode = st.sidebar.selectbox(
+    "Select View Mode", 
+    ["Standard User", "Advanced (Admin)"], 
+    key="main_view_mode"
+)
 
+# Password check
+is_admin = False
+if view_mode == "Advanced (Admin)":
+    admin_pw = st.sidebar.text_input("Password", type="password", key="admin_pw_input")
+    is_admin = (admin_pw == "admin123")
+    
 # --- 6. MAIN APP LOGIC ---
 if not data.empty:
     st.title("📋 Bowler Artwork and Repro cost Estimate")
