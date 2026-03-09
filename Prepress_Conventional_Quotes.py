@@ -138,11 +138,31 @@ else:
     except:
         st.sidebar.warning("⚠️ Google Sheet unreachable.")
 
-# --- 6. MAIN FORM ---
-if not data.empty:
-    st.title("📋 Bowler Artwork and Repro cost Estimate")
-    count = st.session_state.reset_counter
-    loaded = st.session_state.loaded_data
+# 6. Database Search (Add this back to the bottom of your script)
+    if not st.session_state.database.empty:
+        st.markdown("---")
+        with st.expander("📂 Database Search & Load", expanded=False):
+            search_term = st.text_input("🔍 Search Client or Preprod Ref").lower()
+            db = st.session_state.database
+            
+            # Filtering logic
+            filtered_db = db[
+                db['Client'].astype(str).str.lower().str.contains(search_term) | 
+                db['Preprod'].astype(str).str.lower().str.contains(search_term)
+            ]
+            
+            # Display
+            st.dataframe(filtered_db, use_container_width=True)
+            
+            if not filtered_db.empty:
+                col_l, col_r = st.columns([2, 1])
+                options = {idx: f"{row['Preprod']} - {row['Client']}" for idx, row in filtered_db.iterrows()}
+                selected_idx = col_l.selectbox("Select Estimate to Load:", options=list(options.keys()), format_func=lambda x: options[x])
+                
+                if col_l.button("📂 Load Selected into Form"):
+                    st.session_state.loaded_data = db.loc[selected_idx].to_dict()
+                    st.session_state.reset_counter += 1
+                    st.rerun()
     
     # Header Info
     c1, c2, c3, c4 = st.columns([1.5, 1, 2, 1])
