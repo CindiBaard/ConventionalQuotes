@@ -209,7 +209,7 @@ if not data.empty:
             db = st.session_state.database
             filt = db[db['Client'].astype(str).str.lower().str.contains(term) | db['Preprod'].astype(str).str.lower().str.contains(term)]
             
-            # --- UPDATED: Hiding index and specific sensitive columns ---
+            # Hiding sensitive columns
             cols_to_hide = [c for c in ["Item", "Nett", "Gross"] if c in filt.columns]
             st.dataframe(
                 filt, 
@@ -222,11 +222,14 @@ if not data.empty:
                 sel = st.selectbox("Select to Load", options=filt.index, format_func=lambda x: f"{filt.loc[x, 'Preprod']} - {filt.loc[x, 'Client']}")
                 
                 db_c1, db_c2 = st.columns([1, 1])
+                
+                # Button 1: Load Selected
                 if db_c1.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[sel].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
                 
+                # Button 2: Delete Selected (Only visible in Advanced Admin Mode)
                 if is_admin:
                     if db_c2.button("🗑️ Delete Selected Quote", type="secondary"):
                         updated_db = st.session_state.database.drop(sel).reset_index(drop=True)
