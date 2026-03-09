@@ -94,8 +94,8 @@ if 'loaded_data' not in st.session_state: st.session_state.loaded_data = {}
 
 # --- 5. SIDEBAR ---
 st.sidebar.title("🛠 Settings")
-view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"])
-is_admin = (view_mode == "Advanced (Admin)" and st.sidebar.text_input("Password", type="password") == "admin123")
+view_mode = st.sidebar.selectbox("Select View Mode", ["Standard User", "Advanced (Admin)"], key="sidebar_view_mode")
+is_admin = (view_mode == "Advanced (Admin)" and st.sidebar.text_input("Password", type="password", key="admin_pw") == "admin123")
 
 data_option = st.sidebar.radio("Load data from:", ["Upload CSV File", "Google Sheet Link"])
 if data_option == "Upload CSV File":
@@ -173,7 +173,19 @@ if not data.empty:
     # Buttons
     b1, b2, b3 = st.columns([1, 1, 1])
     if b1.button("🚀 Save to Sheets"):
-        record = {"Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, "Description": preprod_desc, "Date": str(quote_date), "Grand_Total": final_total}
+        record = {
+            "Status": "ACTIVE", 
+            "Client": client_name, 
+            "Preprod": preprod_ref, 
+            "Description": preprod_desc, 
+            "Date": str(quote_date),
+            "Foil_H": foil_height,
+            "Foil_W": foil_width,
+            "Foil_C": foil_code,
+            "Total_Excl_Vat": total_gross_sum, 
+            "VAT_15": vat_amount, 
+            "Grand_Total": final_total
+        }
         for k, v in item_entries.items(): record[f"{k}_Qty"] = v["qty"]
         st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
         save_db(st.session_state.database)
@@ -196,19 +208,25 @@ if not data.empty:
             term = st.text_input("Search Client/Preprod").lower()
             db = st.session_state.database
             filt = db[db['Client'].astype(str).str.lower().str.contains(term) | db['Preprod'].astype(str).str.lower().str.contains(term)]
-            st.dataframe(filt, use_container_width=True)
+            
+            # --- UPDATED: Hiding index and specific sensitive columns ---
+            cols_to_hide = [c for c in ["Item", "Nett", "Gross"] if c in filt.columns]
+            st.dataframe(
+                filt, 
+                use_container_width=True, 
+                hide_index=True, 
+                column_order=[c for c in filt.columns if c not in cols_to_hide]
+            )
+            
             if not filt.empty:
                 sel = st.selectbox("Select to Load", options=filt.index, format_func=lambda x: f"{filt.loc[x, 'Preprod']} - {filt.loc[x, 'Client']}")
                 
-                # Action columns for Load and Delete
                 db_c1, db_c2 = st.columns([1, 1])
-                
                 if db_c1.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[sel].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
                 
-                # Delete functionality restricted to Admin mode
                 if is_admin:
                     if db_c2.button("🗑️ Delete Selected Quote", type="secondary"):
                         updated_db = st.session_state.database.drop(sel).reset_index(drop=True)
