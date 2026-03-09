@@ -210,7 +210,7 @@ if not data.empty:
             filt = db[db['Client'].astype(str).str.lower().str.contains(term) | db['Preprod'].astype(str).str.lower().str.contains(term)]
             
             # Hiding sensitive columns
-            cols_to_hide = [c for c in ["Item", "Nett", "Gross"] if c in filt.columns]
+            cols_to_hide = [c for c in ["Item", "Nett", "Gross", "Markup"] if c in filt.columns]
             st.dataframe(
                 filt, 
                 use_container_width=True, 
