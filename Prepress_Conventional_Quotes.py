@@ -189,7 +189,7 @@ if not data.empty:
         st.session_state.loaded_data = {}
         st.rerun()
 
-    # --- DATABASE SEARCH SECTION (Aligned inside if not data.empty) ---
+    # --- DATABASE SEARCH SECTION ---
     if not st.session_state.database.empty:
         st.markdown("---")
         with st.expander("📂 Search & Load Existing Quotes"):
@@ -199,9 +199,22 @@ if not data.empty:
             st.dataframe(filt, use_container_width=True)
             if not filt.empty:
                 sel = st.selectbox("Select to Load", options=filt.index, format_func=lambda x: f"{filt.loc[x, 'Preprod']} - {filt.loc[x, 'Client']}")
-                if st.button("📂 Load Selected"):
+                
+                # Action columns for Load and Delete
+                db_c1, db_c2 = st.columns([1, 1])
+                
+                if db_c1.button("📂 Load Selected"):
                     st.session_state.loaded_data = db.loc[sel].to_dict()
                     st.session_state.reset_counter += 1
                     st.rerun()
+                
+                # Delete functionality restricted to Admin mode
+                if is_admin:
+                    if db_c2.button("🗑️ Delete Selected Quote", type="secondary"):
+                        updated_db = st.session_state.database.drop(sel).reset_index(drop=True)
+                        save_db(updated_db)
+                        st.session_state.database = updated_db
+                        st.success("Quote deleted successfully.")
+                        st.rerun()
 else:
     st.info("👈 Please load data in the sidebar.")
