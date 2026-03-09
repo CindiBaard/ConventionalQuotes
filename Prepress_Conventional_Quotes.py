@@ -110,6 +110,11 @@ else:
 # --- 6. MAIN APP LOGIC ---
 if not data.empty:
     st.title("📋 Bowler Artwork and Repro cost Estimate")
+    
+    # Visual confirmation of Admin Mode
+    if is_admin:
+        st.success("🔓 Advanced (Admin) Mode Active")
+
     count = st.session_state.reset_counter
     loaded = st.session_state.loaded_data
     
@@ -127,6 +132,8 @@ if not data.empty:
     foil_code = f3.number_input("Foil Code", min_value=0.0, value=float(loaded.get("Foil_C", 0.0)), key=f"fc_{count}")
 
     st.markdown("---")
+    
+    # Define Column Widths based on Admin status
     header_cols = [3, 1, 1, 1, 1, 1] if is_admin else [3, 1, 1, 1]
     cols = st.columns(header_cols)
     cols[0].write("**Item Description**")
@@ -155,14 +162,13 @@ if not data.empty:
         total_gross_sum += line_total
         r[3].code(f"{line_total:,.2f}")
         
-        # Admin specific columns
         if is_admin:
             r[4].write(f"{nett:,.2f}")
             r[5].write(f"{markup}%")
             
         item_entries[item_name] = {"qty": qty, "unit": unit_p, "total": line_total}
 
-    # Foil Block
+    # Foil Block Row
     fr = st.columns(header_cols)
     foil_row = data[data['Item'].str.lower().str.contains("foil")].iloc[0] if not data[data['Item'].str.lower().str.contains("foil")].empty else None
     f_name = foil_row['Item'] if foil_row is not None else "Foil Block"
@@ -175,35 +181,36 @@ if not data.empty:
     total_gross_sum += f_line_total
     fr[3].code(f"{f_line_total:,.2f}")
     
-    # Admin specific columns for Foil
     if is_admin:
-        fr[4].write("-") # No specific nett for calculated foil
+        fr[4].write("-") 
         fr[5].write("-")
         
     item_entries[f_name] = {"qty": f_qty, "unit": f_unit_p_in, "total": f_line_total}
+
+    # --- TOTALS CALCULATION ---
+    st.markdown("---")
+    vat_amount = total_gross_sum * 0.15
+    final_total = total_gross_sum + vat_amount
+    
+    tc1, tc2 = st.columns([3, 1])
+    tc2.write(f"**Total (Excl):** R {total_gross_sum:,.2f}")
+    tc2.write(f"**VAT (15%):** R {vat_amount:,.2f}")
+    tc2.subheader(f"Grand Total: R {final_total:,.2f}")
 
     # Buttons
     b1, b2, b3 = st.columns([1, 1, 1])
     if b1.button("🚀 Save to Sheets"):
         record = {
-            "Status": "ACTIVE", 
-            "Client": client_name, 
-            "Preprod": preprod_ref, 
-            "Description": preprod_desc, 
-            "Date": str(quote_date),
-            "Foil_H": foil_height,
-            "Foil_W": foil_width,
-            "Foil_C": foil_code,
-            "Total_Excl_Vat": total_gross_sum, 
-            "VAT_15": vat_amount, 
-            "Grand_Total": final_total
+            "Status": "ACTIVE", "Client": client_name, "Preprod": preprod_ref, 
+            "Description": preprod_desc, "Date": str(quote_date),
+            "Foil_H": foil_height, "Foil_W": foil_width, "Foil_C": foil_code,
+            "Total_Excl_Vat": total_gross_sum, "VAT_15": vat_amount, "Grand_Total": final_total
         }
         for k, v in item_entries.items(): record[f"{k}_Qty"] = v["qty"]
         st.session_state.database = pd.concat([st.session_state.database, pd.DataFrame([record])], ignore_index=True)
         save_db(st.session_state.database)
         st.success("Saved!")
 
-    # PDF Download
     fname = f"{preprod_ref}_{client_name}_{preprod_desc}".replace(" ", "_") + ".pdf"
     pdf_data = create_pdf(client_name, preprod_ref, preprod_desc, quote_date, item_entries, total_gross_sum, vat_amount, final_total)
     b2.download_button("📄 Download PDF", data=pdf_data, file_name=fname, mime="application/pdf")
@@ -212,42 +219,5 @@ if not data.empty:
         st.session_state.reset_counter += 1
         st.session_state.loaded_data = {}
         st.rerun()
-
-    # --- DATABASE SEARCH SECTION ---
-    if not st.session_state.database.empty:
-        st.markdown("---")
-        with st.expander("📂 Search & Load Existing Quotes"):
-            term = st.text_input("Search Client/Preprod").lower()
-            db = st.session_state.database
-            filt = db[db['Client'].astype(str).str.lower().str.contains(term) | db['Preprod'].astype(str).str.lower().str.contains(term)]
-            
-            # Hiding sensitive columns
-            cols_to_hide = [c for c in ["Item", "Nett", "Gross", "Markup"] if c in filt.columns]
-            st.dataframe(
-                filt, 
-                use_container_width=True, 
-                hide_index=True, 
-                column_order=[c for c in filt.columns if c not in cols_to_hide]
-            )
-            
-            if not filt.empty:
-                sel = st.selectbox("Select to Load", options=filt.index, format_func=lambda x: f"{filt.loc[x, 'Preprod']} - {filt.loc[x, 'Client']}")
-                
-                db_c1, db_c2 = st.columns([1, 1])
-                
-                # Button 1: Load Selected
-                if db_c1.button("📂 Load Selected"):
-                    st.session_state.loaded_data = db.loc[sel].to_dict()
-                    st.session_state.reset_counter += 1
-                    st.rerun()
-                
-                # Button 2: Delete Selected (Only visible in Advanced Admin Mode)
-                if is_admin:
-                    if db_c2.button("🗑️ Delete Selected Quote", type="secondary"):
-                        updated_db = st.session_state.database.drop(sel).reset_index(drop=True)
-                        save_db(updated_db)
-                        st.session_state.database = updated_db
-                        st.success("Quote deleted successfully.")
-                        st.rerun()
 else:
     st.info("👈 Please load data in the sidebar.")
